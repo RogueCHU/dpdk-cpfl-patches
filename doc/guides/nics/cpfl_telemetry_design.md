@@ -139,9 +139,12 @@ static void cpfl_dev_alarm_handler(void *param) {
 **方式一：使用 `rte_eal_remote_launch()`**
 
 ```c
-/* Window 0专用通知处理函数，运行在lcore 1 */
+#define CPFL_TELEM_BATCH_SIZE       100    /* max notifications per batch  */
+#define CPFL_TELEM_BATCH_WINDOW_US  1000   /* 1 ms batch window            */
+
+/* Window 0 notification handler, runs on dedicated lcore 1 */
 static int
-cpfl_telem_win0_loop(__rte_unused void *arg)
+cpfl_telem_win0_loop(void *arg)
 {
     struct cpfl_adapter_ext *adapter = arg;
     struct idpf_hw *hw = &adapter->base.hw;
@@ -229,7 +232,8 @@ lcore 3 (回写线程)
 
 **此路径100%复用现有代码**，仅需在调用 `icpf_fill_rule_cfg_data_common()` 时
 设置正确的 `time_sel` 和 `time_sel_val` 参数：
-- `time_sel = 3`：最长老化档位（~2小时）
+- `time_sel = 3`：最长老化档位（~2小时，参见Intel IPU E2100文档 §11.26 Flow Aging中
+  TIME_SEL 2-bit字段定义，4个档位对应不同老化周期，具体值取决于硬件Profile配置）
 - `time_sel_val = 1`：告诉硬件本次更新包含TIME_SEL字段修改
 
 ---
@@ -416,8 +420,8 @@ $ dpdk-telemetry.py
     │   icpf_fill_rule_cfg_data_common(
     │       icpf_ctlq_sem_update_rule,  // Update操作
     │       cookie, vsi_id, port_num, host_id,
-    │       3,   /* time_sel = TIME_SEL_MAX */
-    │       1,   /* time_sel_val = 有效 */
+    │       3,   /* time_sel = TIME_SEL_MAX (~2h, see §11.26 Flow Aging) */
+    │       1,   /* time_sel_val = valid */
     │       0, 2, payload_len, payload, &cfg_data.common);
     │   icpf_prep_rule_desc(&cfg_data, &ctlq_msg);
     │
@@ -473,7 +477,7 @@ $ dpdk-telemetry.py
 
 | 指标 | 值 | 说明 |
 |------|----|------|
-| lcore 1 (Window 0) CPU利用率 | ≤4% | 2000pps × 简单解析 @ 1GHz ARM |
+| lcore 1 (Window 0) CPU利用率 | ≤4% | 2000pps × 简单解析（基于1GHz ARM核心估算，实际取决于目标平台） |
 | lcore 2 (Window 1+2) CPU利用率 | ≤3% | 3000pps × 仅计数 |
 | lcore 3 (回写) CPU利用率 | ≤1% | 低频批量操作 |
 | 回写延迟 | <10ms | 批量Filter Modify，硬件即时生效 |
