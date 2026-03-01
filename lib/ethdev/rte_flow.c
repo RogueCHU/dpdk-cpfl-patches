@@ -384,9 +384,13 @@ rte_flow_create(uint16_t port_id,
 	if (unlikely(!ops))
 		return NULL;
 	if (likely(!!ops->create)) {
+#ifndef RTE_FLOW_SHIM
 		fts_enter(dev);
 		flow = ops->create(dev, attr, pattern, actions, error);
 		fts_exit(dev);
+#else
+		flow = ops->create(dev, attr, pattern, actions, error);
+#endif
 		if (flow == NULL)
 			flow_err(port_id, -rte_errno, error);
 		return flow;
@@ -409,9 +413,13 @@ rte_flow_destroy(uint16_t port_id,
 	if (unlikely(!ops))
 		return -rte_errno;
 	if (likely(!!ops->destroy)) {
+#ifndef RTE_FLOW_SHIM
 		fts_enter(dev);
 		ret = ops->destroy(dev, flow, error);
 		fts_exit(dev);
+#else
+		ret = ops->destroy(dev, flow, error);
+#endif
 		return flow_err(port_id, ret, error);
 	}
 	return rte_flow_error_set(error, ENOSYS,
@@ -456,9 +464,13 @@ rte_flow_query(uint16_t port_id,
 	if (!ops)
 		return -rte_errno;
 	if (likely(!!ops->query)) {
+#ifndef RTE_FLOW_SHIM
 		fts_enter(dev);
 		ret = ops->query(dev, flow, action, data, error);
 		fts_exit(dev);
+#else
+		ret = ops->query(dev, flow, action, data, error);
+#endif
 		return flow_err(port_id, ret, error);
 	}
 	return rte_flow_error_set(error, ENOSYS,

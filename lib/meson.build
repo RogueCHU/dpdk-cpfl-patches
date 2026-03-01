@@ -17,12 +17,12 @@ libraries = [
         'mempool',
         'mbuf',
         'net',
+        'hash',    # efd depends on this
         'meter',
         'ethdev',
         'pci', # core
         'cmdline',
         'metrics', # bitrate/latency stats depends on this
-        'hash',    # efd depends on this
         'timer',   # eventdev depends on this
         'acl',
         'bbdev',

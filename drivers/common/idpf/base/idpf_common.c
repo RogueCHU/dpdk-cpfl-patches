@@ -168,7 +168,7 @@ int idpf_send_msg_to_cp(struct idpf_hw *hw, enum virtchnl_ops v_opcode,
 		idpf_memcpy(dma_mem.va, msg, msglen, IDPF_NONDMA_TO_DMA);
 		ctlq_msg.ctx.indirect.payload = &dma_mem;
 	}
-	status = idpf_ctlq_send(hw, hw->asq, 1, &ctlq_msg);
+	status = idpf_ctlq_send(hw, hw->asq, 1, &ctlq_msg, 0);
 
 	if (dma_mem.va)
 		idpf_free_dma_mem(hw, &dma_mem);

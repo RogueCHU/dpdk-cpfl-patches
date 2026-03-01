@@ -54,7 +54,13 @@
 #include <rte_gro.h>
 #endif
 #include <rte_hexdump.h>
-
+#ifdef RTE_FLOW_SHIM
+#include <shim_core.h>
+#include <rte_flow_shim_flow.h>
+#include <cpfl_flow.h>
+#include <cpfl_p4sde_init.h>
+#include <dlfcn.h>
+#endif
 #include "testpmd.h"
 #include "cmdline_mtr.h"
 
@@ -3224,6 +3230,288 @@ port_queue_flow_pull(portid_t port_id, queueid_t queue_id)
 	return ret;
 }
 
+#ifdef RTE_FLOW_SHIM
+
+#define ntoh64(x) rte_be_to_cpu_64(x)
+#define hton64(x) rte_cpu_to_be_64(x)
+
+int rfs_thread(void *data);
+int rfs_del_thread(void *data);
+struct rfs_data_t {
+	uint16_t port_id;
+    struct rte_flow_attr attr;
+    struct rte_flow_item pattern[5];
+    struct rte_flow_action actions[2];
+    struct rte_flow_error error;
+	int range;
+	int cpu_id;
+	int sleep_time;
+};
+
+struct rfs_del_data_t {
+	uint64_t key1;
+	uint64_t key2;
+	int table_index;
+	int range;
+	int cpu_id;
+	int sleep_time;
+};
+
+void (*p_rfs_set_perf_status)(bool);
+
+int rfs_thread(void *data)
+{
+	int l1,l2,l3;
+	struct rfs_data_t *rfs_data = data;
+	struct rte_flow rfs_flow;
+	struct rte_flow_item *rfs_pattern = rfs_data->pattern;
+	struct rte_flow_item_eth *eth_spec;
+	struct rte_flow_item_ipv4 *ip_spec;
+	int range, rule_counter;
+	long seconds, micros;
+	struct timeval start, end;
+
+	range = rfs_data->range;
+	printf("thread started on cpu %d\n", rfs_data->cpu_id);
+	memset(&rfs_flow, 0x0, sizeof(struct rte_flow));
+
+	eth_spec = (struct rte_flow_item_eth *)rfs_pattern[0].spec;
+	l1 = eth_spec->hdr.dst_addr.addr_bytes[3];
+	l2 = eth_spec->hdr.dst_addr.addr_bytes[4];
+	l3 = eth_spec->hdr.dst_addr.addr_bytes[5];
+	printf("Core %d range %d sess index %d and data %02x:%02x:%02x:%02x:%02x:%02x\n",
+			rfs_data->cpu_id, rfs_data->range, rfs_data->attr.priority,
+			eth_spec->hdr.dst_addr.addr_bytes[0],
+			eth_spec->hdr.dst_addr.addr_bytes[1],
+			eth_spec->hdr.dst_addr.addr_bytes[2],
+			eth_spec->hdr.dst_addr.addr_bytes[3],
+			eth_spec->hdr.dst_addr.addr_bytes[4],
+			eth_spec->hdr.dst_addr.addr_bytes[5]);
+	sleep(rfs_data->sleep_time);
+	gettimeofday(&start, NULL);
+	if (rfs_pattern[0].type == RTE_FLOW_ITEM_TYPE_ETH)
+	{
+		for (rule_counter = 0; rule_counter < range ; l1++)
+		{
+			for (; l2 <= 255 && rule_counter < range ; l2++)
+			{
+				for (; l3 <= 255 && rule_counter < range ; l3++)
+				{
+					eth_spec->hdr.dst_addr.addr_bytes[3] = l1;
+					eth_spec->hdr.dst_addr.addr_bytes[4] = l2;
+					eth_spec->hdr.dst_addr.addr_bytes[5] = l3;
+					rte_flow_create(rfs_data->port_id, (const struct rte_flow_attr *)&rfs_data->attr,
+									(const struct rte_flow_item *)rfs_data->pattern,
+									(const struct rte_flow_action*)rfs_data->actions, &(rfs_data->error));
+					rule_counter++;
+				}
+				l3=0;
+			}
+			l2=0;
+		}
+	}
+	if (rfs_pattern[0].type == RTE_FLOW_ITEM_TYPE_IPV4)
+	{
+		ip_spec = (struct rte_flow_item_ipv4 *)rfs_pattern[0].spec;
+		for (rule_counter = 0; rule_counter < range ; rule_counter++)
+		{
+			rte_flow_create(rfs_data->port_id, (const struct rte_flow_attr *)&rfs_data->attr,
+					(const struct rte_flow_item *)rfs_data->pattern,
+					(const struct rte_flow_action*)rfs_data->actions, &(rfs_data->error));
+			ip_spec->hdr.dst_addr++;
+
+		}
+	}
+	gettimeofday(&end, NULL);
+	seconds = (end.tv_sec - start.tv_sec);
+	micros = ((seconds * 1000000) + end.tv_usec) - (start.tv_usec);
+	seconds = micros / 1000000 ;
+	micros = micros % 1000000 ;
+	printf("Core %d The elapsed time is %ld seconds and %ld micros\n", rfs_data->cpu_id, seconds, micros);
+}
+
+int rfs_del_thread(void *data)
+{
+	struct rfs_del_data_t *rfs_data = data;
+	struct rte_flow rfs_flow = {};
+	int rule_counter;
+	struct rte_flow_error error;
+	long seconds, micros;
+	struct timeval start, end;
+
+	printf("thread started on cpu %d\n", rfs_data->cpu_id);
+	rfs_flow.p4_table_data.key_data[0].key = rfs_data->key1;
+	rfs_flow.p4_table_data.key_data[1].key = rfs_data->key2;
+	rfs_flow.p4_table_data.table_index = rfs_data->table_index;
+	printf("Core %d range is %d data is %lu\n", rfs_data->cpu_id, rfs_data->range, rfs_data->key1);
+
+	sleep(rfs_data->sleep_time);
+	gettimeofday(&start, NULL);
+	for (rule_counter = 0; rule_counter < rfs_data->range; rule_counter++)
+	{
+		//printf("Del dst %lu\n", rfs_flow.p4_table_data.key_data[0].key);
+		//printf("Del src %lu\n", rfs_flow.p4_table_data.key_data[1].key);
+		rte_flow_destroy(0, &rfs_flow, &error);
+		rfs_flow.p4_table_data.key_data[0].key++;
+
+	}
+	gettimeofday(&end, NULL);
+	seconds = (end.tv_sec - start.tv_sec);
+	micros = ((seconds * 1000000) + end.tv_usec) - (start.tv_usec);
+	seconds = micros / 1000000 ;
+	micros = micros % 1000000 ;
+	printf("Core %d The elapsed time is %ld seconds and %ld micros\n", rfs_data->cpu_id, seconds, micros);
+}
+
+int rfs_process(portid_t port_id,
+         const struct rte_flow_attr *attr,
+         const struct rte_flow_item *pattern,
+         const struct rte_flow_action *actions)
+{
+
+	char *rfs_perf_status_p;
+	int rfs_perf_status;
+	struct rte_flow_item_eth *eth_spec;
+	struct rte_flow_item_ipv4 *ip_spec;
+	char *rfs_cores_p;
+	int rfs_core_end, rfs_core_start;
+	int cpu_id;
+	struct rfs_data_t *p_rfs_data;
+	struct rte_flow_item_port_id *conf_port_id;
+	uint64_t key;
+	int i_tid;
+	char *tmp_char_p;
+	int rfs_num_cores;
+	struct rte_flow rfs_flow = {};
+	char rfs_cores_str[16];
+	struct rte_flow *p_rfs_flow;
+	struct rte_flow_error error;
+
+	rfs_perf_status_p = getenv("RFS_PERF_STATUS");
+    if (rfs_perf_status_p) {
+        rfs_perf_status = atoi(rfs_perf_status_p);
+	} else {
+        rfs_perf_status = 0;
+		return 1;
+	}
+
+	rfs_cores_p = getenv("RFS_CORES");
+	if (rfs_cores_p) {
+		strcpy(rfs_cores_str, rfs_cores_p);
+		tmp_char_p = strtok(rfs_cores_str,"-");
+		if (tmp_char_p)
+			rfs_core_start = atoi(tmp_char_p);
+		tmp_char_p = strtok(NULL,"-");
+		if (tmp_char_p)
+			rfs_core_end = atoi(tmp_char_p);
+	}
+	else {
+		rfs_core_start = 1;
+		rfs_core_end = 2;
+	}
+
+	/* get rte flow data. use this data to populate delete entries */
+	rfs_num_cores = rfs_core_end - rfs_core_start;
+	if (!p_rfs_set_perf_status) {
+
+#define RTE_FLOW_SHIM_LIB "librte_flow_shim.so"
+		void *rte_flow_shim_lib_hdl = NULL;
+		rte_flow_shim_lib_hdl = dlopen(RTE_FLOW_SHIM_LIB, RTLD_LOCAL | RTLD_LAZY);
+		if (!rte_flow_shim_lib_hdl) {
+			printf("Unable to load %s lib : %s\n", RTE_FLOW_SHIM_LIB,  dlerror());
+		}
+		dlerror();
+		*(void **)(&p_rfs_set_perf_status) = dlsym(rte_flow_shim_lib_hdl, "rfs_set_perf_status");
+		if (dlerror() != NULL)  {
+			printf("Unable to load %s lib : %s\n", "rfs_set_perf_status",  dlerror());
+		}
+	}
+	p_rfs_set_perf_status(0);
+	p_rfs_flow = rte_flow_create(port_id, attr, pattern, actions, &error);
+	if (p_rfs_flow == NULL)
+	{
+		printf("rte_flow is NULL. Exiting\n");
+		return 1;
+	}
+	p_rfs_set_perf_status(1);
+
+	for (i_tid = 0, cpu_id = rfs_core_start; cpu_id < rfs_core_end; i_tid++, cpu_id++) {
+
+		p_rfs_data = malloc(sizeof(struct rfs_data_t));
+		memset(p_rfs_data, 0x0, sizeof(struct rfs_data_t));
+		eth_spec = malloc(sizeof(struct rte_flow_item_eth));
+		conf_port_id = malloc(sizeof(struct rte_flow_action_port_id));
+
+		memcpy(p_rfs_data->pattern, pattern, sizeof(struct rte_flow_item));
+		memcpy(p_rfs_data->actions, actions, sizeof(struct rte_flow_action));
+		memcpy(&p_rfs_data->attr, attr, sizeof(struct rte_flow_attr));
+
+		memcpy(eth_spec, pattern[0].spec, sizeof(struct rte_flow_item_eth));
+		memcpy(conf_port_id, actions[0].conf, sizeof(struct rte_flow_action_port_id));
+
+		p_rfs_data->range = rfs_perf_status / rfs_num_cores;
+
+		key = ((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[5]) |
+			((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[4] )<< 8  |
+			((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[3] )<< 16 |
+			((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[2]) << 24 |
+			((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[1]) << 32 |
+			((uint64_t)0xff & eth_spec->hdr.dst_addr.addr_bytes[0]) << 40;
+
+		key += i_tid * p_rfs_data->range;
+
+
+		eth_spec->hdr.dst_addr.addr_bytes[5] = ((uint64_t)0xff & key) ;
+		eth_spec->hdr.dst_addr.addr_bytes[4] = ((uint64_t)0xff00 & key) >> 8;
+		eth_spec->hdr.dst_addr.addr_bytes[3] = ((uint64_t)0xff0000 & key) >> 16;
+		eth_spec->hdr.dst_addr.addr_bytes[2] = ((uint64_t)0xff000000 & key) >> 24;
+		eth_spec->hdr.dst_addr.addr_bytes[1] = ((uint64_t)0xff00000000 & key) >> 32;
+		eth_spec->hdr.dst_addr.addr_bytes[0] = ((uint64_t)0xff0000000000 & key) >> 40;
+
+		p_rfs_data->port_id = port_id;
+		p_rfs_data->pattern[0].spec = eth_spec;
+		p_rfs_data->actions[0].conf = conf_port_id;
+
+		p_rfs_data->cpu_id = cpu_id;
+		p_rfs_data->sleep_time = i_tid+1;
+		rte_eal_remote_launch(rfs_thread,
+						     p_rfs_data, cpu_id);
+
+	}
+	rte_eal_mp_wait_lcore();
+
+	sleep(5);
+	p_rfs_flow->p4_table_data.key_data[0].range = 0;
+	p_rfs_flow->p4_table_data.key_data[0].p_len = 0;
+	p_rfs_flow->p4_table_data.key_data[0].last = 0;
+	p_rfs_flow->p4_table_data.mtr_tbl_data.used = 0;
+
+	struct rfs_del_data_t *p_rfs_del_data;
+
+	key = p_rfs_flow->p4_table_data.key_data[0].key;
+	for (i_tid = 0, cpu_id = rfs_core_start; cpu_id < rfs_core_end; i_tid++, cpu_id++) {
+		p_rfs_del_data = malloc(sizeof(struct rfs_del_data_t));
+        memset(p_rfs_del_data, 0x0, sizeof(struct rfs_del_data_t));
+
+		p_rfs_del_data->range = rfs_perf_status / rfs_num_cores;
+
+		key = p_rfs_flow->p4_table_data.key_data[0].key + i_tid * p_rfs_data->range;
+		p_rfs_del_data->key1 = key;
+		p_rfs_del_data->key2 = p_rfs_flow->p4_table_data.key_data[1].key;
+		p_rfs_del_data->cpu_id = cpu_id;
+		p_rfs_del_data->sleep_time = i_tid+1;
+		p_rfs_del_data->table_index = p_rfs_flow->p4_table_data.table_index;
+
+		rte_eal_remote_launch(rfs_del_thread,
+						     p_rfs_del_data, cpu_id);
+	}
+	rte_eal_mp_wait_lcore();
+
+	return 0;
+
+}
+#endif
+
 /** Create flow rule. */
 int
 port_flow_create(portid_t port_id,
@@ -3268,11 +3556,17 @@ port_flow_create(portid_t port_id,
 	}
 	/* Poisoning to make sure PMDs update it in case of error. */
 	memset(&error, 0x22, sizeof(error));
+#ifdef RTE_FLOW_SHIM
+	if (!rfs_process(port_id, attr, pattern, actions) )
+	{
+		return 0;
+	}
+#endif
 	flow = rte_flow_create(port_id, attr, pattern, actions, &error);
 	if (!flow) {
 		if (tunnel_ops->enabled)
 			port_flow_tunnel_offload_cmd_release(port_id,
-							     tunnel_ops, pft);
+					tunnel_ops, pft);
 		free(pf);
 		return port_flow_complain(&error);
 	}
@@ -3428,11 +3722,15 @@ port_flow_query(portid_t port_id, uint32_t rule,
 	struct rte_port *port;
 	struct port_flow *pf;
 	const char *name;
+#ifdef RTE_FLOW_SHIM
+	struct rfs_counter_data query = {0};
+#else
 	union {
 		struct rte_flow_query_count count;
 		struct rte_flow_action_rss rss_conf;
 		struct rte_flow_query_age age;
 	} query;
+#endif
 	int ret;
 
 	if (port_id_is_invalid(port_id, ENABLED_WARN) ||
@@ -3453,6 +3751,9 @@ port_flow_query(portid_t port_id, uint32_t rule,
 		return port_flow_complain(&error);
 	switch (action->type) {
 	case RTE_FLOW_ACTION_TYPE_COUNT:
+#ifdef RTE_FLOW_SHIM
+	case RTE_FLOW_ACTION_TYPE_VOID:
+#endif
 	case RTE_FLOW_ACTION_TYPE_RSS:
 	case RTE_FLOW_ACTION_TYPE_AGE:
 		break;
@@ -3464,10 +3765,26 @@ port_flow_query(portid_t port_id, uint32_t rule,
 	/* Poisoning to make sure PMDs update it in case of error. */
 	memset(&error, 0x55, sizeof(error));
 	memset(&query, 0, sizeof(query));
+#ifdef RTE_FLOW_SHIM
 	if (rte_flow_query(port_id, pf->flow, action, &query, &error))
 		return port_flow_complain(&error);
+#endif
 	switch (action->type) {
+#ifdef RTE_FLOW_SHIM
+	case RTE_FLOW_ACTION_TYPE_VOID:
+		printf("Entry found in hardware\n");
+		break;
+#endif
 	case RTE_FLOW_ACTION_TYPE_COUNT:
+#ifdef RTE_FLOW_SHIM
+		printf("COUNTER_INDEX		: %" PRIu32 "\n\n"
+		       "COUNTER_SPEC_BYTES	: %" PRIu64 "\n"
+		       "COUNTER_SPEC_PACKETS	: %" PRIu64 "\n",
+		       query.counter_index,
+		       query.bytes,
+		       query.packets);
+		break;
+#else
 		printf("%s:\n"
 		       " hits_set: %u\n"
 		       " bytes_set: %u\n"
@@ -3492,6 +3809,7 @@ port_flow_query(portid_t port_id, uint32_t rule,
 		       query.age.sec_since_last_hit_valid,
 		       query.age.sec_since_last_hit);
 		break;
+#endif
 	default:
 		fprintf(stderr,
 			"Cannot display result for action type %d (%s)\n",

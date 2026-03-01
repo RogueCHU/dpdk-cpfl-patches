@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2023 Intel Corporation
+ */
+
+#ifndef _CMDLINE_TDI_H_
+#define _CMDLINE_TDI_H_
+
+#include <rte_tdi.h>
+
+extern cmdline_parse_inst_t cmd_tdi_table_list;
+extern cmdline_parse_inst_t cmd_tdi_table_info;
+
+extern cmdline_parse_inst_t cmd_tdi_action_spec_list;
+extern cmdline_parse_inst_t cmd_tdi_action_spec_info;
+
+extern cmdline_parse_inst_t cmd_tdi_table_key_list;
+extern cmdline_parse_inst_t cmd_tdi_table_key_info;
+
+extern cmdline_parse_inst_t cmd_tdi_action_list;
+extern cmdline_parse_inst_t cmd_tdi_action_info;
+
+extern cmdline_parse_inst_t cmd_tdi_table_key_create;
+extern cmdline_parse_inst_t cmd_tdi_table_key_destroy;
+extern cmdline_parse_inst_t cmd_tdi_table_key_destroy_all;
+extern cmdline_parse_inst_t cmd_tdi_table_key_field_set;
+extern cmdline_parse_inst_t cmd_tdi_table_key_field_set_with_mask;
+extern cmdline_parse_inst_t cmd_tdi_table_key_field_set_with_range;
+extern cmdline_parse_inst_t cmd_tdi_table_key_field_set_with_prefix;
+
+extern cmdline_parse_inst_t cmd_tdi_action_create;
+extern cmdline_parse_inst_t cmd_tdi_action_destroy;
+extern cmdline_parse_inst_t cmd_tdi_action_destroy_all;
+extern cmdline_parse_inst_t cmd_tdi_action_field_set;
+extern cmdline_parse_inst_t cmd_tdi_action_field_get;
+
+extern cmdline_parse_inst_t cmd_tdi_table_entry_add;
+extern cmdline_parse_inst_t cmd_tdi_table_entry_del;
+extern cmdline_parse_inst_t cmd_tdi_table_entry_query;
+extern cmdline_parse_inst_t cmd_tdi_table_entry_count_query;
+
+extern cmdline_parse_inst_t cmd_tdi_table_default_action_set;
+extern cmdline_parse_inst_t cmd_tdi_table_default_action_cancel;
+#endif /* _CMDLINE_TDI_H_ */

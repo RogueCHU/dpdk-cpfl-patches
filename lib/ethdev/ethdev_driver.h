@@ -693,6 +693,10 @@ typedef int (*eth_get_dcb_info)(struct rte_eth_dev *dev,
 typedef int (*eth_pool_ops_supported_t)(struct rte_eth_dev *dev,
 						const char *pool);
 
+struct rte_tdi_ops;
+typedef int (*eth_tdi_ops_get_t)(struct rte_eth_dev *dev,
+				 const struct rte_tdi_ops **ops);
+
 /**
  * @internal
  * Get the hairpin capabilities.
@@ -1299,6 +1303,7 @@ struct eth_dev_ops {
 	eth_get_module_eeprom_t    get_module_eeprom;
 
 	eth_flow_ops_get_t         flow_ops_get; /**< Get flow operations */
+	eth_tdi_ops_get_t          tdi_ops_get;
 
 	eth_get_dcb_info           get_dcb_info; /**< Get DCB information */
 

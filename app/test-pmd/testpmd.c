@@ -75,6 +75,7 @@
 
 #include "testpmd.h"
 
+
 #ifndef MAP_HUGETLB
 /* FreeBSD may not have MAP_HUGETLB (in fact, it probably doesn't) */
 #define HUGE_FLAG (0x40000)
@@ -4425,7 +4426,6 @@ main(int argc, char** argv)
 #else
 	do_mlockall = 1;
 #endif
-
 	argc -= diag;
 	argv += diag;
 	if (argc > 1)
@@ -4575,7 +4575,6 @@ main(int argc, char** argv)
 		if (rc < 0)
 			return 1;
 	}
-
 	ret = rte_eal_cleanup();
 	if (ret != 0)
 		rte_exit(EXIT_FAILURE,

@@ -38,7 +38,8 @@ static int idpf_ctlq_alloc_bufs(struct idpf_hw *hw,
 	int i = 0;
 
 	/* Do not allocate DMA buffers for transmit queues */
-	if (cq->cq_type == IDPF_CTLQ_TYPE_MAILBOX_TX)
+	if (cq->cq_type == IDPF_CTLQ_TYPE_MAILBOX_TX ||
+	    cq->cq_type == IDPF_CTLQ_TYPE_CONFIG_TX)
 		return 0;
 
 	/* We'll be allocating the buffer info memory first, then we can
@@ -50,8 +51,12 @@ static int idpf_ctlq_alloc_bufs(struct idpf_hw *hw,
 	if (!cq->bi.rx_buff)
 		return -ENOMEM;
 
-	/* allocate the mapped buffers (except for the last one) */
-	for (i = 0; i < cq->ring_size - 1; i++) {
+	if (!idpf_alloc_dma_mem(hw, &cq->buf_ring, cq->buf_size * cq->ring_size)) {
+		idpf_free(hw, cq->bi.rx_buff);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < cq->ring_size; i++) {
 		struct idpf_dma_mem *bi;
 		int num = 1; /* number of idpf_dma_mem to be allocated */
 
@@ -62,12 +67,9 @@ static int idpf_ctlq_alloc_bufs(struct idpf_hw *hw,
 
 		bi = cq->bi.rx_buff[i];
 
-		bi->va = idpf_alloc_dma_mem(hw, bi, cq->buf_size);
-		if (!bi->va) {
-			/* unwind will not free the failed entry */
-			idpf_free(hw, cq->bi.rx_buff[i]);
-			goto unwind_alloc_cq_bufs;
-		}
+		bi->va = (void *)((char *)cq->buf_ring.va + (i * cq->buf_size));
+		bi->pa = cq->buf_ring.pa + i * cq->buf_size;
+		bi->size = cq->buf_size;
 	}
 
 	return 0;
@@ -75,10 +77,10 @@ static int idpf_ctlq_alloc_bufs(struct idpf_hw *hw,
 unwind_alloc_cq_bufs:
 	/* don't try to free the one that failed... */
 	i--;
-	for (; i >= 0; i--) {
-		idpf_free_dma_mem(hw, cq->bi.rx_buff[i]);
+	for (; i >= 0; i--)
 		idpf_free(hw, cq->bi.rx_buff[i]);
-	}
+
+	idpf_free_dma_mem(hw, &cq->buf_ring);
 	idpf_free(hw, cq->bi.rx_buff);
 
 	return -ENOMEM;
@@ -115,12 +117,11 @@ static void idpf_ctlq_free_bufs(struct idpf_hw *hw, struct idpf_ctlq_info *cq)
 
 		/* free DMA buffers for rx queues*/
 		for (i = 0; i < cq->ring_size; i++) {
-			if (cq->bi.rx_buff[i]) {
-				idpf_free_dma_mem(hw, cq->bi.rx_buff[i]);
+			if (cq->bi.rx_buff[i])
 				idpf_free(hw, cq->bi.rx_buff[i]);
-			}
 		}
 
+		idpf_free_dma_mem(hw, &cq->buf_ring);
 		bi = (void *)cq->bi.rx_buff;
 	} else {
 		bi = (void *)cq->bi.tx_msg;

@@ -1,0 +1,27 @@
+DPDK_23 {
+
+	global:
+
+	rte_pmd_idpf_get_hw;
+	rte_pmd_alloc_dma_mem;
+	rte_pmd_free_dma_mem;
+	rte_pmd_recv_ctlq_msg;
+	rte_pmd_send_ctlq_msg;
+	rte_pmd_ctlq_clean_sq;
+	rte_pmd_ctlq_post_rx_buffs;
+	rte_pmd_alloc_rule_send_buf;
+	rte_pmd_alloc_rule_buf;
+	rte_pmd_free_rule_buf;
+	rte_pmd_free_rule_send_buf;
+
+	rte_pmd_idpf_get_all_cfgqs;
+	rte_pmd_idpf_get_cfgqs;
+
+	cpfl_ctlq_send_p4sde_cpchnl;
+	cpfl_register_callback;
+
+	cpfl_disable_ctlq_recv;
+	cpf_pmd_get_vport_stats;
+
+	local: *;
+};

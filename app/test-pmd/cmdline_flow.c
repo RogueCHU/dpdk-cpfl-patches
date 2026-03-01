@@ -8345,9 +8345,11 @@ parse_vc_action_set_meta(struct context *ctx, const struct token *token,
 	ret = parse_vc(ctx, token, str, len, buf, size);
 	if (ret < 0)
 		return ret;
+#ifndef RTE_FLOW_SHIM
 	ret = rte_flow_dynf_metadata_register();
 	if (ret < 0)
 		return -1;
+#endif
 	return len;
 }
 

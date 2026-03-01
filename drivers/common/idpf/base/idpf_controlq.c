@@ -161,6 +161,7 @@ int idpf_ctlq_add(struct idpf_hw *hw,
 
 	switch (qinfo->type) {
 	case IDPF_CTLQ_TYPE_MAILBOX_RX:
+	case IDPF_CTLQ_TYPE_CONFIG_RX:
 		is_rxq = true;
 #ifdef __KERNEL__
 		fallthrough;
@@ -168,6 +169,7 @@ int idpf_ctlq_add(struct idpf_hw *hw,
 		/* fallthrough */
 #endif /* __KERNEL__ */
 	case IDPF_CTLQ_TYPE_MAILBOX_TX:
+	case IDPF_CTLQ_TYPE_CONFIG_TX:
 		status = idpf_ctlq_alloc_ring_res(hw, *cq_out);
 		break;
 	default:
@@ -283,6 +285,7 @@ int idpf_ctlq_deinit(struct idpf_hw *hw)
  * @cq: handle to control queue struct to send on
  * @num_q_msg: number of messages to send on control queue
  * @q_msg: pointer to array of queue messages to be sent
+ * @wait_count: wait for descriptor transfer to be completed
  *
  * The caller is expected to allocate DMAable buffers and pass them to the
  * send routine via the q_msg struct / control queue specific data struct.
@@ -290,7 +293,8 @@ int idpf_ctlq_deinit(struct idpf_hw *hw)
  * the completion for that message has been cleaned.
  */
 int idpf_ctlq_send(struct idpf_hw *hw, struct idpf_ctlq_info *cq,
-		   u16 num_q_msg, struct idpf_ctlq_msg q_msg[])
+		   u16 num_q_msg, struct idpf_ctlq_msg q_msg[],
+		   u16 wait_count)
 {
 	struct idpf_ctlq_desc *desc;
 	int num_desc_avail = 0;
@@ -318,11 +322,46 @@ int idpf_ctlq_send(struct idpf_hw *hw, struct idpf_ctlq_info *cq,
 		desc->opcode = CPU_TO_LE16(msg->opcode);
 		desc->pfid_vfid = CPU_TO_LE16(msg->func_id);
 
-		msg_cookie = *(u64 *)&msg->cookie;
-		desc->cookie_high =
-			CPU_TO_LE32(IDPF_HI_DWORD(msg_cookie));
-		desc->cookie_low =
-			CPU_TO_LE32(IDPF_LO_DWORD(msg_cookie));
+#ifdef CPCHNL2_SUPPORT
+/* descriptor formats and the explained in table below
+ *  +--------------+-------------+-------------+-------------+-------------+
+ *  |Mbx version 1 |             |             |                           |
+ *  |   virtchnl   |    unused*  | 16b opcode  |        32b retval         |
+ *  |   cpchnl 1.0 |             |             |                           |
+ *  +--------------+-------------+-------------+---------------------------+
+ *  |Mbx version 2 |             |             |                           |
+ *  |   cpchnl 2.0 |  16b retval | 16b opcode  |       32b sw cookie       |
+ *  +--------------+-------------+-------------+---------------------------+
+ *  | Cfg Packets  |            SW defined and used 64b cookie             |
+ *  +--------------+-------------+-------------+-------------+-------------+
+ *  | desc cookie  |  Upper 16b  |  Lower 16b  |  Upper 16b  |  Lower 16b  |
+ *  |              +-------------+-------------+-------------+-------------+
+ *  |  64b field   |  Cookie High (upper 32b)  |  Cookie Low (lower 32b)   |
+ *  +----------------------------------------------------------------------+
+ *  *note: this field was defined as a 32b opcode. However, no opcodes > 16b are
+ *  currently in use and by changing the spec to make opcodes < 16b, the new
+ *  format could be added safely.
+*/
+		if (msg->mbx_v2.opcode2) {
+			/* if new format is used, then the opcode should be put
+			 * into the lower bits of cookie high, the retval in
+			 * upper bits of cookie high, and the cookie into the
+			 * cookie low field
+			 */
+			desc->cookie_high = CPU_TO_LE16(msg->mbx_v2.opcode2);
+			desc->cookie_high |=
+				CPU_TO_LE16(msg->mbx_v2.retval2) <<
+				MBX_V2_RETVAL_START;
+			desc->cookie_low = CPU_TO_LE32(msg->mbx_v2.cookie2);
+		} else {
+#endif /* !CPCHNL2_SUPPORT */
+			desc->cookie_high =
+				CPU_TO_LE32(msg->cookie.mbx.chnl_opcode);
+			desc->cookie_low =
+				CPU_TO_LE32(msg->cookie.mbx.chnl_retval);
+#ifdef CPCHNL2_SUPPORT
+		}
+#endif /* !CPCHNL2_SUPPORT */
 
 		desc->flags = CPU_TO_LE16((msg->host_id & IDPF_HOST_ID_MASK) <<
 					  IDPF_CTLQ_FLAG_HOST_ID_S);
@@ -380,6 +419,13 @@ int idpf_ctlq_send(struct idpf_hw *hw, struct idpf_ctlq_info *cq,
 	idpf_wmb();
 
 	wr32(hw, cq->reg.tail, cq->next_to_use);
+
+	while (wait_count) {
+		if (LE16_TO_CPU(desc->flags) & IDPF_CTLQ_FLAG_DD)
+			break;
+		wait_count--;
+		usleep(1);
+	}
 
 sq_send_command_out:
 	idpf_release_lock(&cq->cq_lock);
@@ -639,10 +685,27 @@ int idpf_ctlq_recv(struct idpf_ctlq_info *cq, u16 *num_q_msg,
 		if (flags & IDPF_CTLQ_FLAG_ERR)
 			ret_code = -EBADMSG;
 
+/*
 		msg_cookie = (u64)LE32_TO_CPU(desc->cookie_high) << 32;
 		msg_cookie |= (u64)LE32_TO_CPU(desc->cookie_low);
 		idpf_memcpy(&q_msg[i].cookie, &msg_cookie, sizeof(u64),
 			    IDPF_NONDMA_TO_NONDMA);
+*/
+		q_msg[i].cookie.mbx.chnl_opcode = LE32_TO_CPU(desc->cookie_high);
+		q_msg[i].cookie.mbx.chnl_retval = LE32_TO_CPU(desc->cookie_low);
+#ifdef CPCHNL2_SUPPORT
+		/* to support both v1 and v2 mbx formats, read out both formats
+		 * and let the caller decide which format is correct. Caller
+		 * can either mask the upper 16 bits of mbx.chnl_opcode or
+		 * directly use mbx_v2.opcode2 in order to get the proper
+		 * opcode.
+		 */
+		q_msg[i].mbx_v2.opcode2 =
+				IDPF_LO_WORD(LE32_TO_CPU(desc->cookie_high));
+		q_msg[i].mbx_v2.retval2 =
+				IDPF_HI_WORD(LE32_TO_CPU(desc->cookie_high));
+		q_msg[i].mbx_v2.cookie2 = LE32_TO_CPU(desc->cookie_low);
+#endif /* CPCHNL2_SUPPORT */
 
 		q_msg[i].opcode = LE16_TO_CPU(desc->opcode);
 		q_msg[i].data_len = LE16_TO_CPU(desc->datalen);

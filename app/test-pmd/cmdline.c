@@ -63,6 +63,7 @@
 #include "testpmd.h"
 #include "cmdline_mtr.h"
 #include "cmdline_tm.h"
+#include "cmdline_tdi.h"
 #include "bpf_cmd.h"
 
 static struct cmdline *testpmd_cl;
@@ -92,6 +93,7 @@ static void cmd_help_brief_parsed(__rte_unused void *parsed_result,
 		"    help traffic_management         : Traffic Management commands.\n"
 		"    help devices                    : Device related commands.\n"
 		"    help drivers                    : Driver specific commands.\n"
+		"    help tdi                        : Table-Driven filters commands.\n"
 		"    help all                        : All of the above sections.\n\n"
 	);
 
@@ -991,6 +993,129 @@ static void cmd_help_long_parsed(void *parsed_result,
 				cmdline_printf(cl, "%s\n", c->commands[i].help);
 		}
 	}
+
+	if (show_all || !strcmp(res->section, "tdi")) {
+		cmdline_printf(
+			cl,
+			"\n"
+			"Table-Driven Operations:\n"
+			"--------------\n"
+			"tdi table list (port_id)\n"
+			"       Display table identifier / name pairs of the port.\n\n"
+
+			"tdi table info (port_id) <table_id|table_name)\n"
+			"       Display a table properties by identifier or name.\n\n"
+
+			"tdi action_spec list (port_id)\n"
+			"       Display action spec identifier / name pairs of the port.\n\n"
+
+			"tdi action_spec info (port_id) <spec_id|spec_name)\n"
+			"       Display a action spec's properties by identifier or name.\n\n"
+
+			"tdi table key list (port_id)\n"
+			"       Display all testpmd created table key objects on this port.\n\n"
+
+			"tdi table key info (port_id) (key_id)\n"
+			"       Display a table key object with each field's value.\n\n"
+
+			"tdi action list (port_id)\n"
+			"       Display all testpmd created action objects on this port.\n\n"
+
+			"tdi action info (port_id) (action_id)\n"
+			"       Display a action object with each field's value.\n\n"
+
+			"tdi table key create (port_id) (table_id) (key_id)\n"
+			"       Create a table key object. User should assign a unique key\n"
+			"       identifier and use the key identifier for further key related\n"
+			"       operations.\n\n"
+
+			"tdi table key destroy (port_id) (key_id)\n"
+			"       Destroy a table key object.\n\n"
+
+			"tdi table key destroy all (port_id)\n"
+			"       Destroy all table key objects on this port.\n\n"
+
+			"tdi table key set (port_id) (key_id) field (field_id)"
+			" value (value)\n"
+			"       Set exact match key field's value by identifer or name.\n"
+			"       testpmd will try to convert the value string into a byte\n"
+			"       array to fill rte_tdi_table_key_field_set.\n"
+			"       A value string could be:\n"
+			"       Integer      : 1234\n"
+			"                      -- must not exceed a u64 value\n"
+			"       Hex          : 0xabcd\n"
+			"                      -- must not exceed a u64 value\n"
+			"       ipv4 address : 192.16.101.4\n"
+			"                      -- will be converted into a 4 bytes array.\n"
+			"       ipv6 address : 2001:db8:3333:4444:5555:6666:7777:8888\n"
+			"                      -- will be converted into a 16 bytes array.\n"
+			"       mac address  : 00:00:5e:00:53:af\n"
+			"                      -- will be converted into a 6 bytes array.\n\n"
+			"       byte array   : \"1A2B3C4D\"\n"
+			"                      -- each 2 characters represent an byte in hex.\n\n"
+
+			"tdi table key set (port_id) (key_id) field_with_mask (field_id)"
+			" value (value)/(mask)\n"
+			"       Set wildcard match key field's value and mask by identifer.\n"
+			"       testpmd will try to convert the value and mask string into\n"
+			"       a byte array to fill rte_tdi_table_key_field_set_with_mask.\n"
+			"       Same acceptable format of value and mask string as above.\n\n"
+
+			"tdi table key set (port_id) (key_id) field_with_range (field_id)"
+			" value (min)/(max)\n"
+			"       Set range match key field's min and max value by identifer.\n"
+			"       testpmd will try to convert the value string into a byte\n"
+			"       array to fill rte_tdi_table_key_field_set_with_range.\n"
+			"       Same acceptable format of min/max value string as above.\n\n"
+
+			"tdi table key set (port_id) (key_id) field_with_prefix (field_id)"
+			" value (value)/(prefix)\n"
+			"       Set lpm match key field's value and prefix by identifer.\n"
+			"       testpmd will try to convert the value string into a byte\n"
+			"       array to fill rte_tdi_table_key_field_set_with_prefix.\n"
+			"       Same acceptable format of value string as above.\n\n"
+
+			"tdi action create (port_id) (table_id) (spec_id) (action_id)\n"
+			"       Create a action object. User should assign a unique action\n"
+			"       identifier and  use the action identifier for further action\n"
+			"       related operations.\n\n"
+
+			"tdi action destroy (port_id) (action_id)\n"
+			"       Destroy a action object.\n\n"
+
+			"tdi action destroy all (port_id)\n"
+			"       Destroy all action objects on this port.\n\n"
+
+			"tdi action set (port_id) (action_id) field (field_id) value (value)\n"
+			"       Set action key field's value by identifer or name.\n"
+			"       testpmd will try to convert the value string into a byte array to\n"
+			"       fill rte_tdi_action_field_set(_by_name).\n"
+			"       Same acceptable format of value string as key field set.\n\n"
+
+			"tdi action get (port_id) (action_id) field (field_id)"
+			"       Get action key field's value by identifer.\n\n"
+
+			"tdi table entry add (port_id) (table_id) key (key_id) action (action_id)\n"
+			"       Add a  match / action entry to a table.\n\n"
+
+			"tdi table entry query (port_id) (table_id) key (key_id) action (action_id)\n"
+			"       query a  match / action entry from a table, User assign a unused action\n"
+			"       identifier for the return action.\n\n"
+
+			"tdi table entry delete (port_id) (table_id) key (key_id)\n"
+			"       Delete a match / action entry from a table.\n\n"
+
+			"tdi table entry count_query (port_id) (table_id) key (key_id)\n"
+			"       Query table entry hit statistics.\n\n"
+
+			"tdi table default action set (port_id) (table_id) (action_id)\n"
+			"       Set default action of a table.\n\n"
+
+			"tdi table default action cancel (port_id) (table_id)\n"
+			"       Cancel default action of a table.\n\n"
+		);
+	}
+
 }
 
 static cmdline_parse_token_string_t cmd_help_long_help =
@@ -999,13 +1124,13 @@ static cmdline_parse_token_string_t cmd_help_long_help =
 static cmdline_parse_token_string_t cmd_help_long_section =
 	TOKEN_STRING_INITIALIZER(struct cmd_help_long_result, section,
 		"all#control#display#config#ports#"
-		"filters#traffic_management#devices#drivers");
+		"filters#traffic_management#devices#drivers#tdi");
 
 static cmdline_parse_inst_t cmd_help_long = {
 	.f = cmd_help_long_parsed,
 	.data = NULL,
 	.help_str = "help all|control|display|config|ports|"
-		"filters|traffic_management|devices|drivers: "
+		"filters|traffic_management|devices|drivers|tdi: "
 		"Show help",
 	.tokens = {
 		(void *)&cmd_help_long_help,
@@ -12851,6 +12976,32 @@ static cmdline_parse_ctx_t builtin_ctx[] = {
 	(cmdline_parse_inst_t *)&cmd_show_capability,
 	(cmdline_parse_inst_t *)&cmd_set_flex_is_pattern,
 	(cmdline_parse_inst_t *)&cmd_set_flex_spec_pattern,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_list,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_info,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_spec_list,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_spec_info,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_list,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_info,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_list,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_info,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_create,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_destroy,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_destroy_all,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_field_set,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_field_set_with_mask,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_field_set_with_range,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_key_field_set_with_prefix,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_create,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_destroy,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_destroy_all,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_field_set,
+	(cmdline_parse_inst_t *)&cmd_tdi_action_field_get,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_entry_add,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_entry_del,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_entry_query,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_entry_count_query,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_default_action_set,
+	(cmdline_parse_inst_t *)&cmd_tdi_table_default_action_cancel,
 	NULL,
 };
 

@@ -10,6 +10,7 @@ sources = files(
         'cmdline_flow.c',
         'cmdline_mtr.c',
         'cmdline_tm.c',
+        'cmdline_tdi.c',
         'cmd_flex_item.c',
         'config.c',
         'csumonly.c',
@@ -72,6 +73,16 @@ if dpdk_conf.has('RTE_NET_DPAA')
 endif
 
 # Driver-specific commands are located in driver directories.
-includes = include_directories('.')
+includes = []
+includes += include_directories('.')
 sources += testpmd_drivers_sources
 deps += testpmd_drivers_deps
+
+if cc.has_argument('-DRTE_FLOW_SHIM')
+includes += include_directories('../../../../../rte-flow-shim/include')
+includes += include_directories('../../../../../third-party/tdi/third-party/target-syslibs/include/')
+includes += include_directories('../../../../../third-party/tdi/include/')
+includes += include_directories('../../../../../third-party/tdi/third-party/target-utils/third-party/cJSON/')
+includes += include_directories('../../drivers/net/cpfl/')
+includes += include_directories('../../drivers/common/idpf/')
+endif

@@ -298,6 +298,46 @@ EXPERIMENTAL {
 	rte_flow_get_q_aged_flows;
 	rte_mtr_meter_policy_get;
 	rte_mtr_meter_profile_get;
+
+	#rte_tdi rfc
+	rte_tdi_table_list_popup;
+	rte_tdi_table_info_get;
+	rte_tdi_table_info_get_by_name;
+	rte_tdi_table_key_field_info_get;
+	rte_tdi_action_spec_list_popup;
+	rte_tdi_action_spec_info_get;
+	rte_tdi_action_spec_info_get_by_name;
+	rte_tdi_action_spec_field_info_get;
+	rte_tdi_table_key_create;
+	rte_tdi_table_key_destroy;
+	rte_tdi_action_create;
+	rte_tdi_action_destroy;
+	rte_tdi_table_key_field_set;
+	rte_tdi_table_key_field_set_by_name;
+	rte_tdi_table_key_field_set_with_mask;
+	rte_tdi_table_key_field_set_with_mask_by_name;
+	rte_tdi_table_key_field_set_with_range;
+	rte_tdi_table_key_field_set_with_range_by_name;
+	rte_tdi_table_key_field_set_with_prefix;
+	rte_tdi_table_key_field_set_with_prefix_by_name;
+	rte_tdi_action_field_get;
+	rte_tdi_action_field_set;
+	rte_tdi_action_field_set_by_name;
+	rte_tdi_table_default_action_set;
+	rte_tdi_table_default_action_cancel;
+	rte_tdi_table_entry_add;
+	rte_tdi_table_entry_query;
+	rte_tdi_table_entry_count_query;
+	rte_tdi_table_entry_del;
+	rte_tdi_table_key_clone;
+	rte_tdi_action_clone;
+	rte_tdi_table_entry_add_prepare;
+	rte_tdi_table_entry_del_prepare;
+	rte_tdi_table_entry_commit;
+	rte_tdi_table_entry_status_pull;
+	rte_tdi_pna_port_get;
+	rte_tdi_pna_rx_queue_get;
+	rte_tdi_pna_tx_queue_get;
 };
 
 INTERNAL {
@@ -327,4 +367,5 @@ INTERNAL {
 	rte_eth_representor_id_get;
 	rte_eth_switch_domain_alloc;
 	rte_eth_switch_domain_free;
+	rte_tdi_cache_free;
 };

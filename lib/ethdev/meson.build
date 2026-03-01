@@ -10,6 +10,7 @@ sources = files(
         'rte_ethdev.c',
         'rte_ethdev_cman.c',
         'rte_flow.c',
+        'rte_tdi.c',
         'rte_mtr.c',
         'rte_tm.c',
         'sff_telemetry.c',
@@ -31,6 +32,8 @@ headers = files(
         'rte_mtr_driver.h',
         'rte_tm.h',
         'rte_tm_driver.h',
+        'rte_tdi.h',
+        'rte_tdi_driver.h',
 )
 
 indirect_headers += files(
@@ -44,4 +47,4 @@ driver_sdk_headers += files(
         'ethdev_vdev.h',
 )
 
-deps += ['net', 'kvargs', 'meter', 'telemetry']
+deps += ['net', 'kvargs', 'meter', 'telemetry', 'hash']

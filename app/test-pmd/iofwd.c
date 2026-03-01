@@ -97,6 +97,8 @@ stream_init_forward(struct fwd_stream *fs)
 	tx_stopped = ports[fs->tx_port].txq[fs->tx_queue].state ==
 						RTE_ETH_QUEUE_STATE_STOPPED;
 	fs->disabled = rx_stopped || tx_stopped;
+	if (!is_proc_primary())
+		fs->disabled = 0;
 }
 
 struct fwd_engine io_fwd_engine = {
